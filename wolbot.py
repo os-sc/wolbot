@@ -6,12 +6,12 @@ import logging
 import re
 
 from telegram import (InlineKeyboardButton,
-        InlineKeyboardMarkup)
+        InlineKeyboardMarkup,
+        Update)
 from telegram.ext import (Updater,
         CommandHandler,
-        MessageHandler,
-        Filters,
-        CallbackQueryHandler)
+        CallbackQueryHandler,
+        CallbackContext)
 import requests
 import version
 import config
@@ -38,7 +38,7 @@ class Machine:
 # Command Handlers
 ##
 
-def cmd_help(bot, update):
+def cmd_help(update: Update, context: CallbackContext):
     log_call(update)
     help_message = """
 (*≧▽≦) WOLBOT v{v} (≧▽≦*)
@@ -71,14 +71,14 @@ Mac addresses can use any or no separator
     update.message.reply_text(help_message)
 
 
-def cmd_wake(bot, update, **kwargs):
+def cmd_wake(update: Update, context: CallbackContext):
     log_call(update)
     # Check correctness of call
-    if not authorize(bot, update):
+    if not authorize(update, context):
         return
 
     # When no args are supplied
-    if 'args' not in kwargs or len(kwargs['args']) < 1 and len(machines) != 1:
+    if len(context.args) < 1 and len(machines) != 1:
         if not len(machines):
             update.message.reply_text('Please add a machine with the /add command first!')
         markup = InlineKeyboardMarkup(generate_machine_keyboard(machines))
@@ -89,15 +89,15 @@ def cmd_wake(bot, update, **kwargs):
     if len(machines) == 1:
         machine_name = machines[0].name
     else:
-        machine_name = kwargs['args'][0]
+        machine_name = context.args[0]
     for m in machines:
         if m.name == machine_name:
-            send_magic_packet(bot, update, m.addr, m.name)
+            send_magic_packet(update, context, m.addr, m.name)
             return
     update.message.reply_text('Could not find ' + machine_name)
 
 
-def cmd_wake_keyboard_handler(bot, update):
+def cmd_wake_keyboard_handler(update: Update, context: CallbackContext):
     try:
         n = int(update.callback_query.data)
     except ValueError:
@@ -105,27 +105,27 @@ def cmd_wake_keyboard_handler(bot, update):
     matches = [m for m in machines if m.id == n]
     if len(matches) < 1:
         return
-    send_magic_packet(bot, update, matches[0].addr, matches[0].name)
+    send_magic_packet(update, context, matches[0].addr, matches[0].name)
 
 
-def cmd_wake_mac(bot, update, **kwargs):
+def cmd_wake_mac(update: Update, context: CallbackContext):
     log_call(update)
     # Check correctness of call
-    if not authorize(bot, update):
+    if not authorize(update, context):
         return
-    if 'args' not in kwargs or len(kwargs['args']) < 1:
+    if len(context.args) < 1:
         update.message.reply_text('Please supply a mac address')
         return
 
     # Parse arguments and send WoL packets
-    mac_address = kwargs['args'][0]
-    send_magic_packet(bot, update, mac_address, mac_address)
+    mac_address = context.args[0]
+    send_magic_packet(update, context, mac_address, mac_address)
 
 
-def cmd_list(bot, update):
+def cmd_list(update: Update, context: CallbackContext):
     log_call(update)
     # Check correctness of call
-    if not authorize(bot, update):
+    if not authorize(update, context):
         return
 
     # Print all stored machines
@@ -135,18 +135,18 @@ def cmd_list(bot, update):
     update.message.reply_text(msg)
 
 
-def cmd_add(bot, update, **kwargs):
+def cmd_add(update: Update, context: CallbackContext):
     log_call(update)
     # Check correctness of call
-    if not authorize(bot, update):
+    if not authorize(update, context):
         return
-    if 'args' not in kwargs or len(kwargs['args']) < 2:
+    if len(context.args) < 2:
         update.message.reply_text('Please supply a name and mac address')
         return
 
     # Parse arguments
-    machine_name = kwargs['args'][0]
-    addr = kwargs['args'][1]
+    machine_name = context.args[0]
+    addr = context.args[1]
 
     # Validate and normalize arguments
     if any(m.name == machine_name for m in machines):
@@ -174,17 +174,17 @@ def cmd_add(bot, update, **kwargs):
         update.message.reply_text('Could not write changes to disk')
 
 
-def cmd_remove(bot, update, **kwargs):
+def cmd_remove(update: Update, context: CallbackContext):
     log_call(update)
     # Check correctness of call
-    if not authorize(bot, update):
+    if not authorize(update, context):
         return
-    if 'args' not in kwargs or len(kwargs['args']) < 1:
+    if len(context.args) < 1:
         update.message.reply_text('Please supply a name')
         return
 
     # Parse arguments and look for machine to be deleted
-    machine_name = kwargs['args'][0]
+    machine_name = context.args
     if not any(m.name == machine_name for m in machines):
         update.message.reply_text('Could not find ' + machine_name)
         return
@@ -202,10 +202,10 @@ def cmd_remove(bot, update, **kwargs):
         update.message.reply_text('Could not write changes to disk')
 
 
-def cmd_ip(bot, update):
+def cmd_ip(update: Update, context: CallbackContext):
     log_call(update)
     # Check correctness of call
-    if not authorize(bot, update):
+    if not authorize(update, context):
         return
 
     try:
@@ -226,8 +226,8 @@ def cmd_ip(bot, update):
 # Other Functions
 ##
 
-def error(bot, update, error):
-    logger.warning('Update "{u}" caused error "{e}"'.format(u=update, e=error))
+def error(update: Update, context: CallbackContext):
+    logger.warning('Update "{u}" caused error "{e}"'.format(u=update, e=context.error))
 
 
 def log_call(update):
@@ -241,7 +241,7 @@ def log_call(update):
                 .format(c=cmd[0], u=uid))
 
 
-def send_magic_packet(bot, update, mac_address, display_name):
+def send_magic_packet(update: Update, context: CallbackContext, mac_address, display_name):
     try:
         wol.wake(mac_address)
     except ValueError as e:
@@ -268,7 +268,7 @@ def user_is_allowed(uid):
     return str(uid) in config.ALLOWED_USERS
 
 
-def authorize(bot, update):
+def authorize(update: Update, context: CallbackContext):
     if not user_is_allowed(update.message.from_user.id):
         logger.warning('Unknown User {fn} {ln} [{i}] tried to call bot'.format(
                 fn=update.message.from_user.first_name,
@@ -341,18 +341,18 @@ def main():
     read_savefile(config.STORAGE_PATH)
 
     # Set up updater
-    updater = Updater(config.TOKEN)
+    updater = Updater(config.TOKEN, use_context=True)
     disp = updater.dispatcher
 
     # Add handlers
     disp.add_handler(CommandHandler('help',    cmd_help))
     disp.add_handler(CommandHandler('list',    cmd_list))
     disp.add_handler(CommandHandler('ip',      cmd_ip))
-    disp.add_handler(CommandHandler('wake',    cmd_wake,     pass_args=True))
+    disp.add_handler(CommandHandler('wake',    cmd_wake))
     disp.add_handler(CallbackQueryHandler(cmd_wake_keyboard_handler))
-    disp.add_handler(CommandHandler('wakemac', cmd_wake_mac, pass_args=True))
-    disp.add_handler(CommandHandler('add',     cmd_add,      pass_args=True))
-    disp.add_handler(CommandHandler('remove',  cmd_remove,   pass_args=True))
+    disp.add_handler(CommandHandler('wakemac', cmd_wake_mac))
+    disp.add_handler(CommandHandler('add',     cmd_add))
+    disp.add_handler(CommandHandler('remove',  cmd_remove))
 
     disp.add_error_handler(error)
 
