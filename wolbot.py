@@ -94,7 +94,7 @@ def cmd_wake(update: Update, context: CallbackContext):
         machine_name = context.args[0]
     for m in machines:
         if m.name == machine_name:
-            send_magic_packet(bot, update, m.addr, m.name)
+            send_magic_packet(update, context, m.addr, m.name)
             return
     update.message.reply_text('Could not find ' + machine_name)
 
@@ -107,7 +107,7 @@ def cmd_wake_keyboard_handler(update: Update, context: CallbackContext):
     matches = [m for m in machines if m.id == n]
     if len(matches) < 1:
         return
-    send_magic_packet(bot, update, matches[0].addr, matches[0].name)
+    send_magic_packet(update, context, matches[0].addr, matches[0].name)
 
 
 def cmd_wake_mac(update: Update, context: CallbackContext):
@@ -121,7 +121,7 @@ def cmd_wake_mac(update: Update, context: CallbackContext):
 
     # Parse arguments and send WoL packets
     mac_address = context.args[0]
-    send_magic_packet(bot, update, mac_address, mac_address)
+    send_magic_packet(update, context, mac_address, mac_address)
 
 
 def cmd_list(update: Update, context: CallbackContext):
