@@ -10,8 +10,6 @@ from telegram import (InlineKeyboardButton,
         Update)
 from telegram.ext import (Updater,
         CommandHandler,
-        MessageHandler,
-        Filters,
         CallbackQueryHandler,
         CallbackContext)
 import requests
